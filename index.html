@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d0d0d">
+<title>Sombra de Franco</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #0d0d0d; }
+body { display: flex; align-items: center; justify-content: center; }
+#game-wrapper { width: 100%; height: 100%; max-width: 480px; position: relative; background: #0d0d0d; overflow: hidden; }
+#gameCanvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+#ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+#top-bar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; align-items: center; opacity: 0; transition: opacity 1s; }
+#top-bar .player-info { display: flex; align-items: center; gap: 8px; }
+#top-bar .avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #4a1a1a, #1a0a0a); border: 2px solid #5c2a2a; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #c9a0a0; }
+#top-bar .player-name { color: #c9a0a0; font-size: 12px; font-weight: bold; font-family: 'Courier New', monospace; }
+#top-bar .hp-container { width: 80px; height: 6px; background: #1a0a0a; border-radius: 3px; overflow: hidden; margin-top: 2px; }
+#hp-bar { width: 100%; height: 100%; background: linear-gradient(90deg, #8b0000, #ff4444); transition: width 0.3s; }
+#top-bar .score-area { text-align: right; }
+#score { color: #888; font-size: 11px; font-family: 'Courier New', monospace; }
+#area-name { color: #5c5c5c; font-size: 10px; margin-top: 2px; font-family: 'Courier New', monospace; }
+
+/* Diálogo bem acima dos controles */
+#dialogue-box { position: absolute; bottom: 280px; left: 10px; right: 10px; background: rgba(5, 5, 5, 0.95); border: 1px solid #3a2a2a; border-radius: 8px; padding: 14px; opacity: 0; transform: translateY(20px); transition: all 0.5s; pointer-events: auto; }
+#dialogue-speaker { color: #8b6b6b; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; font-family: 'Courier New', monospace; }
+#dialogue-text { color: #c0b0a0; font-size: 13px; line-height: 1.6; font-family: 'Courier New', monospace; }
+#dialogue-hint { text-align: center; margin-top: 10px; }
+#dialogue-hint span { color: #5c4a3a; font-size: 10px; animation: pulse 1.5s infinite; font-family: 'Courier New', monospace; }
+@keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
+/* Joystick mais acima */
+#joystick-zone { position: absolute; bottom: 100px; left: 20px; width: 110px; height: 110px; pointer-events: auto; opacity: 0; transition: opacity 1s; }
+#joystick-base { position: absolute; top: 0; left: 0; width: 110px; height: 110px; border-radius: 50%; background: rgba(30, 20, 20, 0.5); border: 2px solid rgba(60, 40, 40, 0.6); }
+#joystick-knob { position: absolute; top: 50%; left: 50%; width: 44px; height: 44px; border-radius: 50%; background: rgba(80, 30, 30, 0.7); border: 2px solid rgba(120, 50, 50, 0.8); transform: translate(-50%, -50%); transition: none; }
+#joystick-knob.active { background: rgba(140, 60, 60, 0.8); border-color: rgba(180, 80, 80, 0.9); }
+
+/* Botão de ataque mais acima */
+#attack-zone { position: absolute; bottom: 100px; right: 20px; width: 80px; height: 80px; pointer-events: auto; opacity: 0; transition: opacity 1s; }
+#btn-attack { width: 80px; height: 80px; background: rgba(80, 20, 20, 0.5); border: 2px solid rgba(92, 42, 42, 0.7); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #c9a0a0; font-size: 28px; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: all 0.1s; }
+#btn-attack:active { background: rgba(140, 40, 40, 0.7); border-color: rgba(180, 60, 60, 0.9); transform: scale(0.92); }
+
+/* Popup de memória centralizado, longe dos controles */
+#memory-popup { position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%); background: rgba(5, 5, 5, 0.97); border: 1px solid #5c2a2a; border-radius: 12px; padding: 24px; max-width: 300px; width: 85%; text-align: center; opacity: 0; pointer-events: none; transition: opacity 0.8s; z-index: 150; }
+#memory-popup.show { opacity: 1; pointer-events: auto; }
+#memory-popup .mem-icon { font-size: 36px; margin-bottom: 12px; }
+#memory-popup .mem-title { color: #8b6b6b; font-size: 14px; font-weight: bold; margin-bottom: 8px; font-family: 'Courier New', monospace; }
+#memory-popup .mem-text { color: #c0b0a0; font-size: 12px; line-height: 1.7; font-family: 'Courier New', monospace; }
+#memory-popup .mem-hint { color: #5c4a3a; font-size: 10px; margin-top: 16px; animation: pulse 1.5s infinite; font-family: 'Courier New', monospace; }
+
+/* Tela de história completa */
+#story-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.97); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; overflow-y: auto; padding: 30px 20px; }
+#story-screen .story-title { font-size: 22px; color: #8b6b6b; letter-spacing: 4px; margin-bottom: 20px; font-family: 'Courier New', monospace; text-align: center; }
+#story-screen .story-text { color: #c0b0a0; font-size: 12px; line-height: 1.9; max-width: 320px; text-align: left; font-family: 'Courier New', monospace; margin-bottom: 20px; }
+#story-screen .story-text p { margin-bottom: 12px; }
+#story-screen .story-divider { width: 40px; height: 1px; background: linear-gradient(90deg, transparent, #5c2a2a, transparent); margin: 15px auto; }
+#btn-continue-story { padding: 12px 40px; background: transparent; border: 1px solid #5c2a2a; color: #8b6b6b; font-size: 12px; letter-spacing: 2px; cursor: pointer; pointer-events: auto; font-family: 'Courier New', monospace; -webkit-tap-highlight-color: transparent; transition: all 0.3s; margin-top: 10px; }
+#btn-continue-story:hover, #btn-continue-story:active { background: rgba(92, 42, 42, 0.2); border-color: #8b6b6b; color: #c9a0a0; }
+
+#main-menu { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(180deg, #0a0a0a 0%, #1a0a0a 50%, #0d0d0d 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+#menu-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; opacity: 0.3; pointer-events: none; }
+.menu-particle { position: absolute; width: 2px; height: 2px; background: rgba(100, 70, 70, 0.3); border-radius: 50%; }
+#menu-content { text-align: center; z-index: 10; }
+#menu-content h1 { font-size: 28px; color: #8b6b6b; margin-bottom: 4px; letter-spacing: 8px; text-shadow: 0 0 20px rgba(139, 107, 107, 0.3); font-family: 'Courier New', monospace; }
+#menu-content h2 { font-size: 14px; color: #5c4a3a; margin-bottom: 40px; letter-spacing: 12px; font-family: 'Courier New', monospace; }
+#menu-divider { width: 60px; height: 1px; background: linear-gradient(90deg, transparent, #5c2a2a, transparent); margin: 0 auto 30px; }
+#menu-quote { color: #4a3a2a; font-size: 11px; max-width: 260px; margin: 0 auto 30px; line-height: 1.8; font-style: italic; font-family: 'Courier New', monospace; }
+#btn-start { padding: 14px 50px; background: transparent; border: 1px solid #5c2a2a; color: #8b6b6b; font-size: 13px; letter-spacing: 3px; cursor: pointer; transition: all 0.3s; pointer-events: auto; font-family: 'Courier New', monospace; -webkit-tap-highlight-color: transparent; }
+#btn-start:hover, #btn-start:active { background: rgba(92, 42, 42, 0.2); border-color: #8b6b6b; color: #c9a0a0; }
+#menu-hint { margin-top: 15px; color: #3a2a2a; font-size: 9px; letter-spacing: 1px; font-family: 'Courier New', monospace; }
+
+#end-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+#end-screen .end-game-title { font-size: 32px; color: #8b6b6b; letter-spacing: 8px; margin-bottom: 4px; font-family: 'Courier New', monospace; text-shadow: 0 0 20px rgba(139, 107, 107, 0.3); }
+#end-screen .end-game-subtitle { font-size: 14px; color: #5c4a3a; letter-spacing: 12px; margin-bottom: 30px; font-family: 'Courier New', monospace; }
+#end-title { font-size: 22px; margin-bottom: 20px; letter-spacing: 4px; font-family: 'Courier New', monospace; }
+#end-text { color: #5c4a3a; font-size: 12px; max-width: 280px; text-align: center; line-height: 1.8; margin-bottom: 30px; font-family: 'Courier New', monospace; }
+#btn-restart { padding: 14px 50px; background: transparent; border: 1px solid #5c2a2a; color: #8b6b6b; font-size: 13px; letter-spacing: 3px; cursor: pointer; pointer-events: auto; font-family: 'Courier New', monospace; -webkit-tap-highlight-color: transparent; transition: all 0.3s; }
+#btn-restart:hover, #btn-restart:active { background: rgba(92, 42, 42, 0.2); border-color: #8b6b6b; color: #c9a0a0; }
+
+/* Botão de som reposicionado para não cobrir texto */
+#music-toggle { position: absolute; top: 45px; right: 10px; z-index: 200; background: rgba(20, 10, 10, 0.8); border: 1px solid #3a2a2a; color: #5c4a3a; font-size: 10px; padding: 6px 10px; border-radius: 4px; cursor: pointer; pointer-events: auto; font-family: 'Courier New', monospace; display: none; }
+#music-toggle.active { color: #8b6b6b; border-color: #5c2a2a; }
+</style>
+</head>
+<body>
+<div id="game-wrapper">
+<canvas id="gameCanvas"></canvas>
+<div id="ui-layer">
+  <div id="top-bar">
+    <div class="player-info">
+      <div class="avatar">🗡</div>
+      <div>
+        <div class="player-name">FRANCO</div>
+        <div class="hp-container"><div id="hp-bar"></div></div>
+      </div>
+    </div>
+    <div class="score-area">
+      <div id="score">Memórias: 0/7</div>
+      <div id="area-name">Vale das Sombras</div>
+    </div>
+  </div>
+  <div id="dialogue-box">
+    <div id="dialogue-speaker"></div>
+    <div id="dialogue-text"></div>
+    <div id="dialogue-hint"><span>▼ toque para continuar</span></div>
+  </div>
+  <div id="memory-popup">
+    <div class="mem-icon" id="mem-icon">💭</div>
+    <div class="mem-title" id="mem-title"></div>
+    <div class="mem-text" id="mem-text"></div>
+    <div class="mem-hint"><span>▼ toque para continuar</span></div>
+  </div>
+  <div id="joystick-zone">
+    <div id="joystick-base"></div>
+    <div id="joystick-knob"></div>
+  </div>
+  <div id="attack-zone">
+    <div id="btn-attack">⚔</div>
+  </div>
+</div>
+<div id="main-menu">
+  <div id="menu-bg"></div>
+  <div id="menu-content">
+    <h1>SOMBRA</h1>
+    <h2>DE FRANCO</h2>
+    <div id="menu-divider"></div>
+    <p id="menu-quote">"A espada não corta o inimigo.<br> Corta a memória do que perdemos."</p>
+    <button id="btn-start">INICIAR JORNADA</button>
+    <div id="menu-hint">Toque para começar</div>
+  </div>
+</div>
+<div id="story-screen">
+  <div class="story-title" id="story-title"></div>
+  <div class="story-text" id="story-content"></div>
+  <div class="story-divider"></div>
+  <button id="btn-continue-story">CONTINUAR</button>
+</div>
+<div id="end-screen">
+  <div class="end-game-title">SOMBRA</div>
+  <div class="end-game-subtitle">DE FRANCO</div>
+  <div id="menu-divider" style="margin-bottom:20px;"></div>
+  <h2 id="end-title"></h2>
+  <p id="end-text"></p>
+  <button id="btn-restart">REINICIAR JORNADA</button>
+</div>
+<button id="music-toggle">♪ SOM: OFF</button>
+</div>
+<script>
+(function(){
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const wrapper = document.getElementById('game-wrapper');
+let W, H;
+const TILE = 32;
+function resize() { W = wrapper.clientWidth; H = wrapper.clientHeight; canvas.width = W; canvas.height = H; }
+resize();
+window.addEventListener('resize', resize);
+
+// ===== AUDIO ENGINE =====
+const Audio = {
+  ctx: null, masterGain: null, musicGain: null, sfxGain: null, isPlaying: false, musicInterval: null,
+  init() {
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.masterGain = this.ctx.createGain(); this.masterGain.gain.value = 0.7; this.masterGain.connect(this.ctx.destination);
+      this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = 0.45; this.musicGain.connect(this.masterGain);
+      this.sfxGain = this.ctx.createGain(); this.sfxGain.gain.value = 0.6; this.sfxGain.connect(this.masterGain);
+    } catch(e) {}
+  },
+  resume() { if(this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
+  playTone(freq, duration, type, volume, when) {
+    if(!this.ctx) return;
+    const t = when || this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(volume || 0.3, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.connect(gain); gain.connect(this.sfxGain);
+    osc.start(t); osc.stop(t + duration);
+  },
+  playSwordSwing() { if(!this.ctx) return; const t = this.ctx.currentTime; this.playTone(400, 0.1, 'sawtooth', 0.2, t); this.playTone(600, 0.08, 'square', 0.15, t + 0.02); },
+  playHit() { if(!this.ctx) return; const t = this.ctx.currentTime; this.playTone(150, 0.15, 'sawtooth', 0.4, t); this.playTone(80, 0.2, 'square', 0.3, t + 0.05); },
+  playMemoryCollect() { if(!this.ctx) return; const t = this.ctx.currentTime; [523, 659, 784, 1047].forEach((n, i) => this.playTone(n, 0.4, 'sine', 0.3, t + i * 0.15)); },
+  playDamage() { if(!this.ctx) return; const t = this.ctx.currentTime; this.playTone(100, 0.3, 'sawtooth', 0.35, t); this.playTone(60, 0.4, 'square', 0.3, t + 0.1); },
+  playStep() { if(!this.ctx || Math.random() > 0.3) return; const t = this.ctx.currentTime; this.playTone(80 + Math.random()*40, 0.05, 'triangle', 0.08, t); },
+  playPortal() { if(!this.ctx) return; const t = this.ctx.currentTime; for(let i=0; i<5; i++) this.playTone(200 + i*100, 0.3, 'sine', 0.2, t + i*0.1); },
+  startMusic() {
+    if(!this.ctx || this.isPlaying) return;
+    this.isPlaying = true;
+    document.getElementById('music-toggle').textContent = '♪ SOM: ON';
+    document.getElementById('music-toggle').classList.add('active');
+    const melody = [{f:293.66,d:1.2},{f:261.63,d:0.8},{f:220.00,d:1.0},{f:196.00,d:1.5},{f:220.00,d:0.8},{f:261.63,d:1.0},{f:293.66,d:1.2},{f:329.63,d:0.6},{f:293.66,d:1.0},{f:261.63,d:0.8},{f:220.00,d:1.2},{f:196.00,d:2.0},{f:174.61,d:1.0},{f:196.00,d:0.8},{f:220.00,d:1.5},{f:196.00,d:2.5}];
+    const bass = [{f:73.42,d:2},{f:65.41,d:2},{f:55.00,d:2},{f:49.00,d:2},{f:55.00,d:2},{f:65.41,d:2},{f:73.42,d:2},{f:82.41,d:2}];
+    let noteIdx = 0, bassIdx = 0;
+    let nextNoteTime = this.ctx.currentTime + 0.5;
+    let nextBassTime = this.ctx.currentTime + 0.5;
+    const schedule = () => {
+      if(!this.isPlaying) return;
+      const now = this.ctx.currentTime;
+      while(nextNoteTime < now + 2) {
+        const note = melody[noteIdx % melody.length];
+        const osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+        osc.type = 'sine'; osc.frequency.setValueAtTime(note.f, nextNoteTime);
+        gain.gain.setValueAtTime(0.15, nextNoteTime);
+        gain.gain.setValueAtTime(0.15, nextNoteTime + note.d * 0.7);
+        gain.gain.exponentialRampToValueAtTime(0.001, nextNoteTime + note.d);
+        osc.connect(gain); gain.connect(this.musicGain);
+        osc.start(nextNoteTime); osc.stop(nextNoteTime + note.d);
+        const osc2 = this.ctx.createOscillator(), gain2 = this.ctx.createGain();
+        osc2.type = 'triangle'; osc2.frequency.setValueAtTime(note.f * 1.5, nextNoteTime);
+        gain2.gain.setValueAtTime(0.04, nextNoteTime);
+        gain2.gain.exponentialRampToValueAtTime(0.001, nextNoteTime + note.d * 0.8);
+        osc2.connect(gain2); gain2.connect(this.musicGain);
+        osc2.start(nextNoteTime); osc2.stop(nextNoteTime + note.d * 0.8);
+        nextNoteTime += note.d + 0.1; noteIdx++;
+      }
+      while(nextBassTime < now + 2) {
+        const note = bass[bassIdx % bass.length];
+        const osc = this.ctx.createOscillator(), gain = this.ctx.createGain(), filter = this.ctx.createBiquadFilter();
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(note.f, nextBassTime);
+        filter.type = 'lowpass'; filter.frequency.setValueAtTime(200, nextBassTime);
+        gain.gain.setValueAtTime(0.1, nextBassTime);
+        gain.gain.setValueAtTime(0.1, nextBassTime + note.d * 0.8);
+        gain.gain.exponentialRampToValueAtTime(0.001, nextBassTime + note.d);
+        osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
+        osc.start(nextBassTime); osc.stop(nextBassTime + note.d);
+        nextBassTime += note.d; bassIdx++;
+      }
+      this.musicInterval = requestAnimationFrame(schedule);
+    };
+    schedule();
+  },
+  stopMusic() {
+    this.isPlaying = false;
+    if(this.musicInterval) { cancelAnimationFrame(this.musicInterval); this.musicInterval = null; }
+    document.getElementById('music-toggle').textContent = '♪ SOM: OFF';
+    document.getElementById('music-toggle').classList.remove('active');
+  },
+  toggle() { if(this.isPlaying) this.stopMusic(); else this.startMusic(); }
+};
+
+// ===== JOYSTICK =====
+const Joystick = {
+  active: false, startX: 0, startY: 0, dx: 0, dy: 0, maxDist: 35,
+  init() {
+    const zone = document.getElementById('joystick-zone');
+    const knob = document.getElementById('joystick-knob');
+    const start = (e) => {
+      e.preventDefault();
+      const touch = e.touches ? e.touches[0] : e;
+      const rect = zone.getBoundingClientRect();
+      this.active = true;
+      this.startX = rect.left + rect.width / 2;
+      this.startY = rect.top + rect.height / 2;
+      this.update(touch.clientX, touch.clientY);
+      knob.classList.add('active');
+    };
+    const move = (e) => {
+      if(!this.active) return;
+      e.preventDefault();
+      const touch = e.touches ? e.touches[0] : e;
+      this.update(touch.clientX, touch.clientY);
+    };
+    const end = (e) => {
+      e.preventDefault();
+      this.active = false; this.dx = 0; this.dy = 0;
+      knob.style.transform = 'translate(-50%, -50%)';
+      knob.classList.remove('active');
+    };
+    zone.addEventListener('touchstart', start, {passive: false});
+    zone.addEventListener('touchmove', move, {passive: false});
+    zone.addEventListener('touchend', end, {passive: false});
+    zone.addEventListener('touchcancel', end, {passive: false});
+    zone.addEventListener('mousedown', start);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+  },
+  update(clientX, clientY) {
+    const knob = document.getElementById('joystick-knob');
+    let dx = clientX - this.startX;
+    let dy = clientY - this.startY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist > this.maxDist) { dx = (dx / dist) * this.maxDist; dy = (dy / dist) * this.maxDist; }
+    this.dx = dx / this.maxDist;
+    this.dy = dy / this.maxDist;
+    knob.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
+  }
+};
+
+// ===== GAME STATE =====
+const Game = {
+  state: 'menu', screen: 0, memories: 0, maxMemories: 7, dialogueIndex: 0,
+  shake: 0, flash: 0, time: 0, particles: [], camera: {x:0, y:0},
+  memoryPopupActive: false, portalCooldown: 0, storyPage: 0,
+  story: [
+    { speaker: "???", text: "Franco... acorde. A névoa está se dissipando." },
+    { speaker: "Franco", text: "...Onde estou? Não consigo lembrar... só sinto a espada em minhas mãos." },
+    { speaker: "???", text: "Você está no Vale das Sombras. Aqui, memórias se tornam monstros." },
+    { speaker: "???", text: "Recupere suas 7 memórias perdidas, Franco. Ou será consumido pelo esquecimento." },
+    { speaker: "Franco", text: "Entendido. Cada passo será uma lembrança... ou um adeus." }
+  ],
+  memoryData: [
+    { icon: "👶", title: "Memória de Criança", text: "Você me deixou para trás quando partiu para a guerra, Franco. Por que não voltou?" },
+    { icon: "💔", title: "Memória de Amor", text: "Eu esperei por você na ponte. A chuva molhou minhas cartas... e você nunca as leu." },
+    { icon: "👨", title: "Memória de Pai", text: "Filho... minhas últimas palavras foram seu nome. Você estava longe demais para ouvir." },
+    { icon: "🤝", title: "Memória de Amigo", text: "Você prometeu voltar, Franco. Prometeu. Mas promessas não alimentam a saudade." },
+    { icon: "👩", title: "Memória de Mãe", text: "Meu menino... sua espada não protege quem você ama. Só afasta." },
+    { icon: "🪞", title: "Memória de Si Mesmo", text: "Eu sou o que restou de você, Franco. A parte que não consegue mais chorar." },
+    { icon: "✨", title: "Memória Final", text: "A verdade, Franco... é que você escolheu a espada. E a espada não abraça." }
+  ],
+  fullStory: [
+    { title: "PARABÉNS", text: `<p>Você completou a jornada de Franco.</p><p>Todas as 7 memórias foram recuperadas das sombras. O Vale das Sombras não tem mais poder sobre ele.</p><p>Mas a história de Franco não termina aqui. Abaixo, você descobrirá quem eram aquelas vozes que o guiaram — e o que realmente aconteceu.</p>` },
+    { title: "A HISTÓRIA DE FRANCO", text: `<p><strong>Franco</strong> nasceu em uma pequena vila às margens de um rio que já não existe mais. Seu pai era ferreiro e sua mãe, curandeira. Desde criança, Franco era diferente — enquanto os outros brincavam, ele observava. Enquanto os outros riam, ele pensava.</p><p>Aos dezesseis anos, a guerra chegou à vila. Um exército de invasores queimou as casas, matou os homens e levou as crianças. Franco escapou por pouco, escondido no celeiro enquanto ouvia os gritos.</p><p>Foi então que ele pegou a espada pela primeira vez. Não para lutar — para sobreviver.</p>` },
+    { title: "A CRIANÇA", text: `<p>A <strong>Memória de Criança</strong> era sua irmã mais nova, <strong>Lia</strong>. Ela tinha apenas oito anos quando Franco partiu. Ele prometeu voltar em três dias. Levou quinze anos.</p><p>Lia cresceu achando que o irmão a abandonara. Nunca soube que Franco passou anos em campos de batalha, lutando não pela glória, mas pela promessa de que, um dia, poderia voltar e protegê-la.</p><p>Quando Franco finalmente retornou, Lia já tinha partido. A vila estava em ruínas. E a única coisa que restava era a culpa.</p>` },
+    { title: "O AMOR", text: `<p><strong>Isabela</strong> era a filha do padeiro da vila vizinha. Franco a conheceu aos dezoito anos, quando entregava ferramentas para o pai. Ela escrevia poemas nas margens de pães e ria de piadas ruins.</p><p>Eles se encontravam na ponte de pedra toda sexta-feira. Ela escrevia cartas que ele guardava no bolso, perto do coração. Quando Franco partiu para a guerra, ela prometeu esperar.</p><p>Esperou quatro anos. Escreveu cento e vinte e três cartas. A cento e vigésima quarta foi molhada pela chuva e nunca chegou. Franco nunca soube que ela esperou até o fim.</p>` },
+    { title: "O PAI", text: `<p><strong>Tomas</strong>, o ferreiro, era um homem de poucas palavras e muitos silêncios. Ensinou a Franco que uma espada bem forjada é aquela que nunca precisa ser desembainhada.</p><p>Quando Franco partiu, Tomas ficou na porta da ferraria por três dias, esperando o filho voltar atrás. Não voltou. Tomas morreu dois anos depois, sozinho, dizendo o nome do filho como última palavra.</p><p>Franco só soube da morte do pai cinco anos depois, por uma carta que chegou manchada de água e sangue.</p>` },
+    { title: "O AMIGO", text: `<p><strong>Davi</strong> e Franco cresceram juntos. Davi era o único que entendia os silêncios de Franco. Quando a guerra começou, juraram voltar juntos.</p><p>Davi morreu na terceira batalha, protegendo Franco de uma flecha. Franco carregou o corpo do amigo por sete quilômetros até enterrá-lo sob uma amendoeira. Nunca contou a ninguém. Nunca visitou a lápide.</p><p>A promessa de voltar juntos foi quebrada. E Franco nunca perdoou a si mesmo por isso.</p>` },
+    { title: "A MÃE", text: `<p><strong>Elena</strong> era uma curandeira que acreditava que toda dor tinha um remédio. Exceto a dor de ver o filho partir.</p><p>Ela tentou impedir Franco de pegar a espada. Disse que armas não protegem quem se ama — só afastam. Franco não ouviu. Achou que, se fosse forte o suficiente, poderia proteger todos.</p><p>Quando Franco voltou, Elena já não reconhecia o filho. Os olhos eram os mesmos, mas a alma estava em outro lugar. Ela morreu seis meses depois, dizendo que o amor de uma mãe não precisa de gratidão — só de presença.</p>` },
+    { title: "FRANCO", text: `<p>A <strong>Memória de Si Mesmo</strong> é a parte de Franco que ele enterrou para sobreviver. A parte que ria, que sonhava, que acreditava em final feliz.</p><p>Ele se tornou um guerreiro temido, mas por dentro era um menino assustado que só queria voltar para casa. A espada que ele empunhava pesava menos que a culpa que carregava.</p><p>No Vale das Sombras, Franco finalmente enfrentou o que mais temia: a verdade de que escolheu a luta em vez do amor. E que, às vezes, a coragem não está em lutar — está em voltar.</p>` },
+    { title: "O FIM", text: `<p>Franco recuperou todas as memórias. Mas saber não cura.</p><p>Ele segue em frente agora, carregando o peso do que foi, do que poderia ter sido. A espada brilha fracamente — não mais uma arma, mas uma lanterna na escuridão.</p><p>E pela primeira vez em muito tempo, Franco sente algo além da dor: <strong>esperança</strong>.</p><p>Porque mesmo que não possa voltar, pode escolher para onde vai. E essa é a memória mais importante de todas.</p>` }
+  ]
+};
+
+// ===== MAPS COM 2 MEMÓRIAS POR SALA (exceto primeira e última) =====
+// 0=vazio, 1=parede, 2=spawn, 3=memória, 4=inimigo, 5=portal, 6=árvore, 7=pedra
+const maps = [
+  // Tela 0 - Vale das Sombras (spawn + 1 memória + portal)
+  [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,6,0,0,0,0,0,0,0,0,0,0,6,0,1],
+    [1,0,0,7,0,0,0,0,0,0,7,0,0,0,1],
+    [1,0,0,0,0,0,0,2,0,0,0,0,0,0,1],
+    [1,0,6,0,0,0,0,0,0,0,0,0,6,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,7,0,0,3,0,0,0,7,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,6,0,0,0,0,0,0,0,0,0,0,6,0,1],
+    [1,1,1,1,1,1,5,1,1,1,1,1,1,1,1]
+  ],
+  // Tela 1 - Floresta dos Suspiros (2 memórias + portal)
+  [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,6,6,0,0,0,0,0,0,0,0,6,6,0,1],
+    [1,0,0,0,7,0,0,0,0,7,0,0,0,0,1],
+    [1,0,6,0,0,0,4,0,0,0,0,6,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,7,0,0,0,3,0,0,0,3,0,0,7,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,6,0,0,0,4,0,0,0,0,6,0,0,1],
+    [1,0,0,0,7,0,0,0,0,7,0,0,0,0,1],
+    [1,1,1,1,1,1,5,1,1,1,1,1,1,1,1]
+  ],
+  // Tela 2 - Ruínas do Passado (2 memórias + portal)
+  [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,7,0,0,0,0,0,0,0,0,0,0,7,0,1],
+    [1,0,0,0,0,0,4,0,0,0,0,0,0,0,1],
+    [1,0,7,0,0,0,0,0,0,0,0,7,0,0,1],
+    [1,0,0,0,3,0,0,0,0,3,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,7,0,0,0,4,0,0,0,0,7,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,7,0,0,0,0,0,0,0,0,0,0,7,0,1],
+    [1,1,1,1,1,1,5,1,1,1,1,1,1,1,1]
+  ],
+  // Tela 3 - Abismo das Lembranças (2 memórias + portal)
+  [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,7,0,0,4,0,0,0,4,0,0,7,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,3,0,0,0,0,3,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,7,0,0,4,0,0,0,4,0,0,7,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,5,1,1,1,1,1,1,1,1]
+  ],
+  // Tela 4 - Câmara da Verdade (memória final)
+  [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,3,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+  ]
+];
+
+// ===== PLAYER =====
+const Player = {
+  x: 0, y: 0, dir: 'down', hp: 100, maxHp: 100, speed: 2,
+  attacking: false, attackTimer: 0, attackDuration: 15, invincible: 0, moving: false, stepTimer: 0,
+  reset() { this.hp = 100; this.x = 7 * TILE; this.y = 3 * TILE; this.dir = 'down'; this.attacking = false; this.invincible = 0; this.stepTimer = 0; }
+};
+
+// ===== ENEMIES — MAIS LENTOS =====
+const enemies = [];
+function spawnEnemies(screen) {
+  enemies.length = 0;
+  const map = maps[screen];
+  for(let y=0; y<map.length; y++){
+    for(let x=0; x<map[0].length; x++){
+      if(map[y][x] === 4){
+        enemies.push({
+          x: x*TILE + TILE/2, y: y*TILE + TILE/2,
+          hp: 30 + screen*8,
+          maxHp: 30 + screen*8,
+          speed: 0.4 + screen*0.15,
+          dir: Math.random()*Math.PI*2,
+          attackCooldown: 0,
+          type: screen >= 3 ? 'shadow_knight' : 'wraith'
+        });
+      }
+    }
+  }
+}
+
+// ===== KEYBOARD INPUT =====
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  keys[e.key] = true;
+  if(e.key === ' ' && Game.state === 'dialogue' && !Game.memoryPopupActive) document.getElementById('dialogue-box').click();
+  if(e.key === ' ' && Game.memoryPopupActive) hideMemoryPopup();
+  if(e.key === ' ' && Game.state === 'story') nextStoryPage();
+});
+window.addEventListener('keyup', (e) => keys[e.key] = false);
+
+// ===== ATTACK BUTTON =====
+const attackBtn = document.getElementById('btn-attack');
+let attackPressed = false;
+attackBtn.addEventListener('touchstart', (e) => { e.preventDefault(); attackPressed = true; });
+attackBtn.addEventListener('touchend', (e) => { e.preventDefault(); attackPressed = false; });
+attackBtn.addEventListener('touchcancel', (e) => { attackPressed = false; });
+attackBtn.addEventListener('mousedown', () => { attackPressed = true; });
+attackBtn.addEventListener('mouseup', () => { attackPressed = false; });
+attackBtn.addEventListener('mouseleave', () => { attackPressed = false; });
+
+// ===== DRAWING =====
+function drawPixelRect(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(Math.floor(x), Math.floor(y), w, h); }
+function drawTile(tx, ty, type) {
+  const px = tx * TILE - Game.camera.x;
+  const py = ty * TILE - Game.camera.y;
+  if(px < -TILE || py < -TILE || px > W || py > H) return;
+  switch(type) {
+    case 1: drawPixelRect(px, py, TILE, TILE, '#1a0f0f'); drawPixelRect(px+2, py+2, TILE-4, TILE-4, '#2a1a1a'); drawPixelRect(px+4, py+4, TILE-8, 2, '#3a2a2a'); break;
+    case 6: drawPixelRect(px+12, py+20, 8, 12, '#2a1a0a'); drawPixelRect(px+4, py+4, 24, 20, '#0a1a0a'); drawPixelRect(px+8, py+8, 16, 12, '#0f2a0f'); break;
+    case 7: drawPixelRect(px+4, py+8, 24, 20, '#2a2a2a'); drawPixelRect(px+8, py+4, 16, 8, '#3a3a3a'); drawPixelRect(px+10, py+6, 4, 4, '#4a4a4a'); break;
+    case 3: { const glow = Math.sin(Game.time * 0.05) * 0.3 + 0.7; ctx.globalAlpha = glow; drawPixelRect(px+8, py+8, 16, 16, '#4a3a2a'); drawPixelRect(px+10, py+10, 12, 12, '#6a5a3a'); drawPixelRect(px+12, py+12, 8, 8, '#8a7a4a'); ctx.globalAlpha = 1; if(Math.random() < 0.1) Game.particles.push({ x: px+16, y: py+16, vx: (Math.random()-0.5)*0.5, vy: -Math.random()*0.5-0.2, life: 30, maxLife: 30, color: '#8a7a4a', size: 2 }); break; }
+    case 5: { const portalGlow = Math.sin(Game.time * 0.08) * 0.4 + 0.6; ctx.globalAlpha = portalGlow; drawPixelRect(px+4, py+4, 24, 24, '#2a0a2a'); drawPixelRect(px+8, py+8, 16, 16, '#4a1a4a'); drawPixelRect(px+12, py+12, 8, 8, '#6a2a6a'); ctx.globalAlpha = 1; break; }
+  }
+}
+function drawPlayer() {
+  const px = Player.x - Game.camera.x;
+  const py = Player.y - Game.camera.y;
+  ctx.globalAlpha = 0.3; drawPixelRect(px+4, py+26, 24, 6, '#000'); ctx.globalAlpha = 1;
+  const bob = Player.moving ? Math.sin(Game.time * 0.15) * 2 : 0;
+  drawPixelRect(px+10, py+8+bob, 12, 14, '#3a2a2a');
+  drawPixelRect(px+8, py+22+bob, 16, 10, '#2a1a1a');
+  drawPixelRect(px+12, py+12+bob, 2, 2, '#8a6a6a');
+  drawPixelRect(px+18, py+12+bob, 2, 2, '#8a6a6a');
+  if(Player.attacking) {
+    const progress = Player.attackTimer / Player.attackDuration;
+    const baseAngle = Player.dir === 'right' ? 0 : Player.dir === 'down' ? Math.PI/2 : Player.dir === 'left' ? Math.PI : -Math.PI/2;
+    const angle = baseAngle + Math.sin(progress * Math.PI) * 1.5;
+    const sx = px + 16 + Math.cos(angle) * 20;
+    const sy = py + 20 + Math.sin(angle) * 20;
+    ctx.save(); ctx.translate(px+16, py+20); ctx.rotate(angle);
+    drawPixelRect(0, -2, 22, 4, '#c9c9c9'); drawPixelRect(0, -1, 22, 2, '#e9e9e9'); drawPixelRect(-6, -2, 6, 4, '#5c2a2a');
+    ctx.restore();
+    Game.particles.push({ x: sx, y: sy, vx: (Math.random()-0.5)*2, vy: (Math.random()-0.5)*2, life: 10, maxLife: 10, color: '#c9c9c9', size: 3 });
+  } else {
+    const restAngle = Player.dir === 'right' ? 0.3 : Player.dir === 'left' ? 2.8 : Player.dir === 'down' ? 1.3 : -1.8;
+    ctx.save(); ctx.translate(px+16, py+20); ctx.rotate(restAngle);
+    drawPixelRect(0, -1, 18, 2, '#999'); drawPixelRect(-4, -1, 4, 2, '#5c2a2a');
+    ctx.restore();
+  }
+}
+function drawEnemy(e) {
+  const px = e.x - Game.camera.x - TILE/2;
+  const py = e.y - Game.camera.y - TILE/2;
+  ctx.globalAlpha = 0.2; drawPixelRect(px+8, py+26, 16, 6, '#000'); ctx.globalAlpha = 1;
+  if(e.type === 'wraith') {
+    const float = Math.sin(Game.time * 0.1 + e.x) * 3;
+    ctx.globalAlpha = 0.7 + Math.sin(Game.time * 0.08) * 0.2;
+    drawPixelRect(px+8, py+4+float, 16, 20, '#1a0a1a'); drawPixelRect(px+10, py+6+float, 12, 16, '#2a0a1a');
+    drawPixelRect(px+11, py+10+float, 3, 3, '#8b0000'); drawPixelRect(px+18, py+10+float, 3, 3, '#8b0000');
+    ctx.globalAlpha = 1;
+  } else {
+    drawPixelRect(px+6, py+4, 20, 22, '#0a0a0a'); drawPixelRect(px+8, py+6, 16, 18, '#1a1a1a');
+    drawPixelRect(px+10, py+10, 4, 3, '#ccc'); drawPixelRect(px+18, py+10, 4, 3, '#ccc'); drawPixelRect(px+22, py+8, 14, 3, '#333');
+  }
+  if(e.hp < e.maxHp) { drawPixelRect(px+4, py-4, 24, 3, '#1a0a0a'); drawPixelRect(px+4, py-4, 24 * (e.hp/e.maxHp), 3, '#8b0000'); }
+}
+function drawParticles() {
+  for(let i=Game.particles.length-1; i>=0; i--) {
+    const p = Game.particles[i];
+    p.x += p.vx; p.y += p.vy; p.life--;
+    if(p.life <= 0) { Game.particles.splice(i, 1); continue; }
+    ctx.globalAlpha = p.life / p.maxLife;
+    drawPixelRect(p.x, p.y, p.size, p.size, p.color);
+    ctx.globalAlpha = 1;
+  }
+}
+function drawFog() {
+  const gradient = ctx.createRadialGradient(W/2, H/2, 50, W/2, H/2, Math.max(W,H)/1.5);
+  gradient.addColorStop(0, 'rgba(10,5,5,0)'); gradient.addColorStop(0.6, 'rgba(10,5,5,0.3)'); gradient.addColorStop(1, 'rgba(5,2,2,0.7)');
+  ctx.fillStyle = gradient; ctx.fillRect(0, 0, W, H);
+  const vig = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.3, W/2, H/2, Math.max(W,H)*0.8);
+  vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+}
+function drawBackground() { ctx.fillStyle = '#0d0a0a'; ctx.fillRect(0, 0, W, H); }
+
+// ===== COLLISION =====
+function getTileAt(x, y) {
+  const map = maps[Game.screen];
+  const tx = Math.floor(x / TILE);
+  const ty = Math.floor(y / TILE);
+  if(ty < 0 || ty >= map.length || tx < 0 || tx >= map[0].length) return 1;
+  return map[ty][tx];
+}
+function isSolid(tile) { return tile === 1 || tile === 6 || tile === 7; }
+function rectCollide(x1, y1, w1, h1, x2, y2, w2, h2) { return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2; }
+
+// ===== UPDATE =====
+function update() {
+  Game.time++;
+  if(Game.portalCooldown > 0) Game.portalCooldown--;
+
+  if(Game.state === 'playing') {
+    let dx = 0, dy = 0;
+    if(keys['ArrowUp'] || keys['w'] || keys['W']) { dy = -1; Player.dir = 'up'; }
+    if(keys['ArrowDown'] || keys['s'] || keys['S']) { dy = 1; Player.dir = 'down'; }
+    if(keys['ArrowLeft'] || keys['a'] || keys['A']) { dx = -1; Player.dir = 'left'; }
+    if(keys['ArrowRight'] || keys['d'] || keys['D']) { dx = 1; Player.dir = 'right'; }
+
+    if(Joystick.active) {
+      dx = Joystick.dx; dy = Joystick.dy;
+      if(Math.abs(dx) > Math.abs(dy)) { Player.dir = dx > 0 ? 'right' : 'left'; }
+      else if(Math.abs(dy) > 0.1) { Player.dir = dy > 0 ? 'down' : 'up'; }
+    }
+
+    Player.moving = Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1;
+
+    if(Player.moving) {
+      const len = Math.sqrt(dx*dx + dy*dy);
+      if(len > 1) { dx /= len; dy /= len; }
+      const moveX = dx * Player.speed;
+      const moveY = dy * Player.speed;
+      const newX = Player.x + moveX;
+      const newY = Player.y + moveY;
+      if(!isSolid(getTileAt(newX+6, Player.y+6)) && !isSolid(getTileAt(newX+26, Player.y+6)) && !isSolid(getTileAt(newX+6, Player.y+30)) && !isSolid(getTileAt(newX+26, Player.y+30))) Player.x = newX;
+      if(!isSolid(getTileAt(Player.x+6, newY+6)) && !isSolid(getTileAt(Player.x+26, newY+6)) && !isSolid(getTileAt(Player.x+6, newY+30)) && !isSolid(getTileAt(Player.x+26, newY+30))) Player.y = newY;
+      Player.stepTimer++;
+      if(Player.stepTimer % 15 === 0) Audio.playStep();
+    }
+
+    Game.camera.x = Player.x - W/2 + 16;
+    Game.camera.y = Player.y - H/2 + 20;
+
+    if((attackPressed || keys[' ']) && !Player.attacking) {
+      Player.attacking = true;
+      Player.attackTimer = Player.attackDuration;
+      Audio.playSwordSwing();
+      let ax = Player.x + 16, ay = Player.y + 20;
+      let aw = 30, ah = 30;
+      if(Player.dir === 'right') ax += 15;
+      if(Player.dir === 'left') ax -= 35;
+      if(Player.dir === 'down') ay += 15;
+      if(Player.dir === 'up') ay -= 35;
+      for(let i=enemies.length-1; i>=0; i--) {
+        const e = enemies[i];
+        if(rectCollide(ax, ay, aw, ah, e.x-12, e.y-12, 24, 24)) {
+          e.hp -= 15;
+          Game.shake = 5;
+          Game.flash = 0.3;
+          Audio.playHit();
+          for(let j=0; j<8; j++) Game.particles.push({ x: e.x, y: e.y, vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4, life: 20, maxLife: 20, color: '#5c0000', size: 3 });
+          if(e.hp <= 0) {
+            enemies.splice(i, 1);
+            for(let j=0; j<15; j++) Game.particles.push({ x: e.x, y: e.y, vx: (Math.random()-0.5)*3, vy: (Math.random()-0.5)*3, life: 40, maxLife: 40, color: '#2a0a1a', size: 4 });
+          }
+        }
+      }
+    }
+
+    if(Player.attacking) {
+      Player.attackTimer--;
+      if(Player.attackTimer <= 0) Player.attacking = false;
+    }
+
+    for(const e of enemies) {
+      const dist = Math.hypot(Player.x+16 - e.x, Player.y+20 - e.y);
+      if(dist < 150) {
+        const angle = Math.atan2(Player.y+20 - e.y, Player.x+16 - e.x);
+        e.x += Math.cos(angle) * e.speed;
+        e.y += Math.sin(angle) * e.speed;
+        if(dist < 20 && Player.invincible <= 0) {
+          Player.hp -= 10;
+          Player.invincible = 40;
+          Game.shake = 8;
+          Game.flash = 0.4;
+          Audio.playDamage();
+          document.getElementById('hp-bar').style.width = (Player.hp/Player.maxHp*100) + '%';
+          if(Player.hp <= 0) showEnd(false);
+        }
+      }
+      e.attackCooldown--;
+    }
+
+    if(Player.invincible > 0) Player.invincible--;
+
+    const ptx = Math.floor((Player.x+16)/TILE);
+    const pty = Math.floor((Player.y+20)/TILE);
+    const tile = maps[Game.screen][pty]?.[ptx];
+
+    if(tile === 3 && !Game.memoryPopupActive) {
+      maps[Game.screen][pty][ptx] = 0;
+      Game.memories++;
+      document.getElementById('score').textContent = 'Memórias: ' + Game.memories + '/7';
+      Audio.playMemoryCollect();
+      for(let i=0; i<20; i++) Game.particles.push({ x: ptx*TILE+16, y: pty*TILE+16, vx: (Math.random()-0.5)*3, vy: (Math.random()-0.5)*3, life: 60, maxLife: 60, color: '#c9a0a0', size: 3 });
+      const mem = Game.memoryData[Game.memories - 1];
+      if(mem) showMemoryPopup(mem.icon, mem.title, mem.text);
+    }
+
+    if(tile === 5 && Game.portalCooldown <= 0) {
+      if(Game.screen < maps.length - 1) {
+        Game.screen++;
+        Player.x = 7 * TILE;
+        Player.y = 2 * TILE;
+        Game.portalCooldown = 60;
+        spawnEnemies(Game.screen);
+        Audio.playPortal();
+        const names = ['Vale das Sombras','Floresta dos Suspiros','Ruínas do Passado','Abismo das Lembranças','Câmara da Verdade'];
+        document.getElementById('area-name').textContent = names[Game.screen] || '';
+      }
+    }
+  }
+
+  if(Game.shake > 0) {
+    Game.camera.x += (Math.random()-0.5)*Game.shake;
+    Game.camera.y += (Math.random()-0.5)*Game.shake;
+    Game.shake *= 0.9;
+    if(Game.shake < 0.5) Game.shake = 0;
+  }
+  if(Game.flash > 0) Game.flash -= 0.02;
+}
+
+// ===== RENDER =====
+function render() {
+  drawBackground();
+  if(Game.state === 'playing' || Game.state === 'combat') {
+    const map = maps[Game.screen];
+    for(let y=0; y<map.length; y++){
+      for(let x=0; x<map[0].length; x++){
+        drawTile(x, y, map[y][x]);
+      }
+    }
+    for(const e of enemies) drawEnemy(e);
+    if(Player.invincible % 4 < 2) drawPlayer();
+    drawParticles();
+    drawFog();
+    if(Game.flash > 0) { ctx.fillStyle = 'rgba(139,0,0,' + Game.flash + ')'; ctx.fillRect(0, 0, W, H); }
+  }
+}
+
+// ===== UI FUNCTIONS =====
+function showDialogue(speaker, text) {
+  const box = document.getElementById('dialogue-box');
+  document.getElementById('dialogue-speaker').textContent = speaker;
+  document.getElementById('dialogue-text').textContent = text;
+  box.style.opacity = '1';
+  box.style.transform = 'translateY(0)';
+}
+function hideDialogue() {
+  const box = document.getElementById('dialogue-box');
+  box.style.opacity = '0';
+  box.style.transform = 'translateY(20px)';
+}
+function showMemoryPopup(icon, title, text) {
+  Game.memoryPopupActive = true;
+  Game.state = 'dialogue';
+  const popup = document.getElementById('memory-popup');
+  document.getElementById('mem-icon').textContent = icon;
+  document.getElementById('mem-title').textContent = title;
+  document.getElementById('mem-text').textContent = text;
+  popup.classList.add('show');
+}
+function hideMemoryPopup() {
+  Game.memoryPopupActive = false;
+  const popup = document.getElementById('memory-popup');
+  popup.classList.remove('show');
+  if(Game.memories >= Game.maxMemories) {
+    setTimeout(() => startStorySequence(), 500);
+  } else {
+    Game.state = 'playing';
+  }
+}
+
+// ===== STORY SEQUENCE =====
+function startStorySequence() {
+  Game.state = 'story';
+  Game.storyPage = 0;
+  document.getElementById('top-bar').style.opacity = '0';
+  document.getElementById('joystick-zone').style.opacity = '0';
+  document.getElementById('attack-zone').style.opacity = '0';
+  showStoryPage(0);
+}
+function showStoryPage(page) {
+  const screen = document.getElementById('story-screen');
+  const data = Game.fullStory[page];
+  if(!data) {
+    screen.style.display = 'none';
+    showEnd(true);
+    return;
+  }
+  document.getElementById('story-title').textContent = data.title;
+  document.getElementById('story-content').innerHTML = data.text;
+  const btn = document.getElementById('btn-continue-story');
+  btn.textContent = page === Game.fullStory.length - 1 ? 'VER CRÉDITOS' : 'CONTINUAR';
+  screen.style.display = 'flex';
+}
+function nextStoryPage() {
+  Game.storyPage++;
+  if(Game.storyPage >= Game.fullStory.length) {
+    document.getElementById('story-screen').style.display = 'none';
+    showEnd(true);
+  } else {
+    showStoryPage(Game.storyPage);
+  }
+}
+function showEnd(victory) {
+  Game.state = 'end';
+  const screen = document.getElementById('end-screen');
+  const title = document.getElementById('end-title');
+  const text = document.getElementById('end-text');
+  screen.style.display = 'flex';
+  if(victory) {
+    title.textContent = 'OBRIGADO POR JOGAR';
+    title.style.color = '#6a5a4a';
+    text.textContent = 'Franco segue em frente. E você, jogador, fez parte dessa jornada. Até a próxima história.';
+  } else {
+    title.textContent = 'ESQUECIDO';
+    title.style.color = '#3a1a1a';
+    text.textContent = 'Franco sucumbiu às sombras. Suas memórias se dissiparam na névoa. Mas o vale lembra de todos que passam... talvez em outra vida, em outro tempo, ele encontre a paz que buscava.';
+  }
+}
+function startGame() {
+  Audio.init();
+  Audio.resume();
+  Audio.startMusic();
+  document.getElementById('main-menu').style.display = 'none';
+  document.getElementById('end-screen').style.display = 'none';
+  document.getElementById('story-screen').style.display = 'none';
+  document.getElementById('top-bar').style.opacity = '1';
+  document.getElementById('joystick-zone').style.opacity = '1';
+  document.getElementById('attack-zone').style.opacity = '1';
+  document.getElementById('music-toggle').style.display = 'block';
+  Player.reset();
+  Game.screen = 0;
+  Game.memories = 0;
+  Game.state = 'dialogue';
+  Game.dialogueIndex = 0;
+  Game.particles = [];
+  Game.memoryPopupActive = false;
+  Game.portalCooldown = 0;
+  Game.storyPage = 0;
+  document.getElementById('score').textContent = 'Memórias: 0/7';
+  document.getElementById('hp-bar').style.width = '100%';
+  document.getElementById('area-name').textContent = 'Vale das Sombras';
+  spawnEnemies(0);
+  showDialogue(Game.story[0].speaker, Game.story[0].text);
+}
+
+// ===== EVENT LISTENERS =====
+document.getElementById('btn-start').addEventListener('click', startGame);
+document.getElementById('btn-start').addEventListener('touchstart', (e) => { e.preventDefault(); startGame(); });
+document.getElementById('btn-restart').addEventListener('click', () => { startGame(); });
+document.getElementById('btn-continue-story').addEventListener('click', nextStoryPage);
+document.getElementById('btn-continue-story').addEventListener('touchstart', (e) => { e.preventDefault(); nextStoryPage(); });
+document.getElementById('music-toggle').addEventListener('click', () => Audio.toggle());
+document.getElementById('dialogue-box').addEventListener('click', () => {
+  if(Game.state === 'dialogue' && !Game.memoryPopupActive) {
+    Game.dialogueIndex++;
+    if(Game.dialogueIndex < Game.story.length && Game.memories === 0) {
+      showDialogue(Game.story[Game.dialogueIndex].speaker, Game.story[Game.dialogueIndex].text);
+    } else {
+      hideDialogue();
+      Game.state = 'playing';
+    }
+  }
+});
+document.getElementById('memory-popup').addEventListener('click', () => { if(Game.memoryPopupActive) hideMemoryPopup(); });
+
+// Menu particles
+const menuBg = document.getElementById('menu-bg');
+for(let i=0; i<30; i++) {
+  const p = document.createElement('div');
+  p.className = 'menu-particle';
+  p.style.left = Math.random()*100 + '%';
+  p.style.top = Math.random()*100 + '%';
+  p.style.animation = 'float ' + (3+Math.random()*4) + 's ease-in-out infinite';
+  p.style.animationDelay = Math.random()*2 + 's';
+  menuBg.appendChild(p);
+}
+
+// Init joystick
+Joystick.init();
+
+// ===== GAME LOOP =====
+function loop() {
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+loop();
+})();
+</script>
+</body>
+</html>
